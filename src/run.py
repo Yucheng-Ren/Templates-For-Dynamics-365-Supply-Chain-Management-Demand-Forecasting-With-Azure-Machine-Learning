@@ -1,8 +1,8 @@
 ﻿import os
-os.system(f"pip install azureml-core~=1.5")
-os.system(f"pip install azureml-pipeline~=1.5")
+os.system(f"pip install azureml-core")
+os.system(f"pip install azureml-pipeline")
 os.system(f"pip install argparse")
-os.system(f"pip install azureml-dataset-runtime[fuse,pandas]~=1.5")
+os.system(f"pip install azureml-dataset-runtime[fuse,pandas]")
 
 from datetime import datetime
 import sys
@@ -17,12 +17,31 @@ from azureml.exceptions import ComputeTargetException, ExperimentExecutionExcept
 from azureml.pipeline.core import Pipeline, PipelineData
 from azureml.pipeline.steps import ParallelRunConfig, ParallelRunStep
 from azureml.pipeline.core import PipelineParameter
+from azureml.data.dataset_factory import DataType
 import parameters
 
 def get_input(workspace, inputPath):
     """Return an input."""
     file_datastore = workspace.get_default_datastore()
-    file_datasetAggregated = Dataset.Tabular.from_delimited_files(path=(file_datastore, inputPath))
+    # convert all column types to string as in R they will be convert correctly to integer
+    file_datasetAggregated = Dataset.Tabular.from_delimited_files(path=(file_datastore, inputPath), set_column_types={
+        'GranularityAttribute': DataType.to_string(),
+        'DateKey': DataType.to_string(),
+        'TransactionQty': DataType.to_string(),
+        'GranularityAttributeKey': DataType.to_string(), # most likely numeric, but not used in forecast.r
+        'CONFIDENCE_LEVEL': DataType.to_string(),
+        'FORCE_SEASONALITY': DataType.to_string(),
+        'FORECAST_START_DATEKEY': DataType.to_string(),
+        'HISTORY_DATE_RANGE_FROM': DataType.to_string(),
+        'HISTORY_DATE_RANGE_TO': DataType.to_string(),
+        'HORIZON': DataType.to_string(),
+        'MAXIMUM_SERIES_VALUE': DataType.to_string(), # string - can be 1E+12 format and not used in forecast.r
+        'MINIMUM_SERIES_VALUE': DataType.to_string(), # string - can be 1E+12 format and not used in forecast.r
+        'MISSING_VALUE_SCOPE': DataType.to_string(),
+        'MISSING_VALUE_SUBSTITUTION': DataType.to_string(), # either numeric or string - checked in forecast.r
+        'SEASONALITY': DataType.to_string(),
+        'TEST_SET_SIZE_PERCENT': DataType.to_string(),
+        'TIME_SERIES_MODEL': DataType.to_string()})
     partitioned_dataset = file_datasetAggregated.partition_by(partition_keys=['GranularityAttributeKey'], target=(file_datastore, "partition_by_GranularityAttributeKey"), name="partitioned_historical_data")
 
     return partitioned_dataset.as_named_input("partitioned_tabular_input")
@@ -43,7 +62,7 @@ FROM {DEFAULT_CPU_IMAGE}
 
 # Pin pip version to avoid known ruamel installation issue.
 # https://docs.microsoft.com/en-us/python/api/overview/azure/ml/install?view=azure-ml-py#troubleshooting
-RUN conda install -c r -y pip=20.1.1
+RUN conda install -c r -y pip
 
 # For dataprep.
 RUN pip install azureml-core azureml-dataset-runtime
